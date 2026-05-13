@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Uma Club Member Finder</title>
+
+  <style>
+    body {
+      max-width: 1200px;
+      margin: auto;
+      padding: 24px;
+
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    input,
+    button {
+      width: 100%;
+      box-sizing: border-box;
+
+      margin-top: 10px;
+      margin-bottom: 16px;
+      padding: 12px;
+
+      border: 1px solid #444;
+      border-radius: 6px;
+
+      background: #1b1b1b;
+      color: white;
+      font-size: 14px;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+
+      background: #2d6cdf;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #3a7cff;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-bottom: 12px;
+      color: #aaa;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+
+      border: 1px solid #444;
+      border-radius: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+
+      background: #1b1b1b;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+
+      background: #222;
+    }
+
+    th,
+    td {
+      padding: 10px;
+
+      border-bottom: 1px solid #333;
+
+      text-align: left;
+      font-size: 14px;
+    }
+
+    tr:hover {
+      background: #1a1a1a;
+    }
+
+    /*
+      Highlight rows where the previous club and current club match.
+      These players are likely still in the same club.
+    */
+    .same-club-row {
+      background: rgba(255, 215, 0, 0.12);
+    }
+
+    .same-club-row:hover {
+      background: rgba(255, 215, 0, 0.2);
+    }
+
+    /*
+      Trainer IDs can be clicked to copy them to clipboard.
+    */
+    .copyable-id {
+      cursor: pointer;
+
+      color: #7db4ff;
+      font-weight: bold;
+    }
+
+    .copyable-id:hover {
+      text-decoration: underline;
+    }
+
+    .copy-flash {
+      animation: copyFlash 0.4s ease;
+    }
+
+    @keyframes copyFlash {
+      0% {
+        background: rgba(255, 255, 255, 0.35);
+      }
+
+      100% {
+        background: transparent;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Uma Club Member Finder</h1>
+
+  <input
+    id="apiKey"
+    type="password"
+    placeholder="Enter your uma.moe API key"
+  />
+
+  <button id="searchBtn">
+    Search Top 100 Clubs
+  </button>
+
+  <div class="status" id="status">
+    Idle.
+  </div>
+
+  <div class="table-wrapper">
+    <table id="resultsTable">
+      <thead>
+        <tr>
+          <th>Trainer ID</th>
+          <th>Trainer Name</th>
+          <th>Previous Club</th>
+          <th>Current Club</th>
+          <th>3D Gain</th>
+          <th>7D Gain</th>
+          <th>30D Gain</th>
+        </tr>
+      </thead>
+
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_BASE = "https://uma.moe/api/v4";
+
+    // Delay between club requests
+    const REQUEST_DELAY_MS = 2000;
+
+    // Delay between ranking lookups
+    const RANKING_DELAY_MS = 500;
+
+    const apiKeyInput = document.getElementById("apiKey");
+    const searchBtn = document.getElementById("searchBtn");
+    const statusBox = document.getElementById("status");
+    const resultsBody = document.getElementById("resultsBody");
+
+    function setStatus(text) {
+      statusBox.textContent = text;
+    }
+
+    /*
+      Converts:
+      2026-05-11T12:00:07Z
+
+      Into:
+      2026-05-11
+
+      Used to compare club update dates with member update dates.
+    */
+    function extractDate(isoString) {
+      return isoString.split("T")[0];
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function clearTable() {
+      resultsBody.innerHTML = "";
+    }
+
+    /*
+      Adds a new result row to the table.
+    */
+    function addRow(data) {
+      const row = document.createElement("tr");
+
+      // Highlight players whose current club matches the previous club
+      if (data.previousCircle === data.currentCircle) {
+        row.classList.add("same-club-row");
+      }
+
+      row.innerHTML = `
+        <td class="copyable-id">
+          ${data.viewerId}
+        </td>
+
+        <td>${data.trainerName}</td>
+        <td>${data.previousCircle}</td>
+        <td>${data.currentCircle}</td>
+
+        <td>${data.gain3d.toLocaleString()}</td>
+        <td>${data.gain7d.toLocaleString()}</td>
+        <td>${data.gain30d.toLocaleString()}</td>
+      `;
+
+      // Clicking the trainer ID copies it to clipboard
+      const idCell = row.querySelector(".copyable-id");
+
+      idCell.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(data.viewerId);
+
+          idCell.classList.add("copy-flash");
+
+          setTimeout(() => {
+            idCell.classList.remove("copy-flash");
+          }, 400);
+
+        } catch (err) {
+          console.error("Clipboard copy failed:", err);
+        }
+      });
+
+      resultsBody.appendChild(row);
+    }
+
+    /*
+      Wrapper around fetch() that automatically includes
+      the API key header required by uma.moe.
+    */
+    async function fetchJson(url, apiKey) {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "X-API-Key": apiKey
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} while fetching ${url}`);
+      }
+
+      return await response.json();
+    }
+
+    /*
+      Looks up a player's current club and recent gain stats
+      using the rankings/gains endpoint.
+    */
+    async function fetchCurrentClub(viewerId, apiKey) {
+      try {
+        const data = await fetchJson(
+          `${API_BASE}/rankings/gains?page=0&limit=100&query=${viewerId}&sort_by=gain_30d`,
+          apiKey
+        );
+
+        if (!data.rankings || data.rankings.length === 0) {
+          return null;
+        }
+
+        // Exact viewer_id match
+        const player = data.rankings.find(
+          entry => String(entry.viewer_id) === String(viewerId)
+        );
+
+        if (!player) {
+          return null;
+        }
+
+        return {
+          circleName: player.circle_name || "No Club",
+          gain3d: player.gain_3d ?? 0,
+          gain7d: player.gain_7d ?? 0,
+          gain30d: player.gain_30d ?? 0
+        };
+
+      } catch (err) {
+        console.error("Ranking lookup failed:", viewerId, err);
+
+        return {
+          circleName: "Error",
+          gain3d: "-",
+          gain7d: "-",
+          gain30d: "-"
+        };
+      }
+    }
+
+    /*
+      Main search flow:
+
+      1. Fetch top 100 clubs
+      2. Fetch members for each club
+      3. Compare member update date vs club update date
+      4. If they differ, treat member as a possible leaver
+      5. Look up the member's current club and gains
+      6. Add result to table
+    */
+    async function runSearch() {
+      const apiKey = apiKeyInput.value.trim();
+
+      if (!apiKey) {
+        alert("Please provide an API key.");
+        return;
+      }
+
+      clearTable();
+      searchBtn.disabled = true;
+
+      try {
+        setStatus("Fetching top 100 clubs...");
+
+        const circlesData = await fetchJson(
+          `${API_BASE}/circles/list?page=0`,
+          apiKey
+        );
+
+        const circles = circlesData.circles || [];
+
+        // Prevent duplicate trainer entries
+        const processedIds = new Set();
+
+        for (let i = 0; i < circles.length; i++) {
+          const circle = circles[i];
+
+          setStatus(
+            `Checking club ${i + 1}/${circles.length}: ${circle.name}`
+          );
+
+          try {
+            const details = await fetchJson(
+              `${API_BASE}/circles?circle_id=${circle.circle_id}`,
+              apiKey
+            );
+
+            const circleDate = extractDate(
+              details.circle.last_updated
+            );
+
+            for (const member of details.members) {
+              const memberDate = extractDate(
+                member.last_updated
+              );
+
+              /*
+                If the member update date differs from the club update date,
+                the member likely left the club.
+              */
+              if (memberDate !== circleDate) {
+
+                if (processedIds.has(member.viewer_id)) {
+                  continue;
+                }
+
+                processedIds.add(member.viewer_id);
+
+                setStatus(
+                  `Checking current club for ${member.trainer_name}`
+                );
+
+                const rankingData = await fetchCurrentClub(
+                  member.viewer_id,
+                  apiKey
+                );
+
+                if (!rankingData) {
+                  continue;
+                }
+
+                addRow({
+                  viewerId: member.viewer_id,
+                  trainerName: member.trainer_name,
+                  previousCircle: circle.name,
+                  currentCircle: rankingData.circleName,
+                  gain3d: rankingData.gain3d,
+                  gain7d: rankingData.gain7d,
+                  gain30d: rankingData.gain30d
+                });
+
+                await sleep(RANKING_DELAY_MS);
+              }
+            }
+
+          } catch (err) {
+            console.error("Failed circle:", circle.circle_id, err);
+          }
+
+          // Avoid hammering the API
+          if (i < circles.length - 1) {
+            await sleep(REQUEST_DELAY_MS);
+          }
+        }
+
+        setStatus("Done.");
+
+      } catch (err) {
+        console.error(err);
+
+        setStatus("Error occurred.");
+        alert(err.message);
+      }
+
+      searchBtn.disabled = false;
+    }
+
+    searchBtn.addEventListener("click", runSearch);
+  </script>
+
+</body>
+</html>
