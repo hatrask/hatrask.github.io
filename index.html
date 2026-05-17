@@ -151,8 +151,9 @@
     Search Top 100 Clubs
   </button>
 
-  <div class="status" id="status">
-    Idle.
+  <div class="status">
+    <div id="clubStatus">Idle.</div>
+    <div id="detailStatus"></div>
   </div>
 
   <div class="table-wrapper">
@@ -184,11 +185,16 @@
 
     const apiKeyInput = document.getElementById("apiKey");
     const searchBtn = document.getElementById("searchBtn");
-    const statusBox = document.getElementById("status");
+    const clubStatusBox = document.getElementById("clubStatus");
+    const detailStatusBox = document.getElementById("detailStatus");
     const resultsBody = document.getElementById("resultsBody");
 
-    function setStatus(text) {
-      statusBox.textContent = text;
+    function setClubStatus(text) {
+      clubStatusBox.textContent = text;
+    }
+
+    function setDetailStatus(text) {
+      detailStatusBox.textContent = text;
     }
 
     /*
@@ -348,7 +354,8 @@
       searchBtn.disabled = true;
 
       try {
-        setStatus("Fetching top 100 clubs...");
+        setClubStatus("Fetching top 100 clubs...");
+        setDetailStatus("");
 
         const circlesData = await fetchJson(
           `${API_BASE}/circles/list?page=0`,
@@ -363,7 +370,7 @@
         for (let i = 0; i < circles.length; i++) {
           const circle = circles[i];
 
-          setStatus(
+          setClubStatus(
             `Checking club ${i + 1}/${circles.length}: ${circle.name}`
           );
 
@@ -394,7 +401,7 @@
 
                 processedIds.add(member.viewer_id);
 
-                setStatus(
+                setDetailStatus(
                   `Checking current club for ${member.trainer_name}`
                 );
 
@@ -436,12 +443,13 @@
           }
         }
 
-        setStatus("Done.");
+        setClubStatus("Done.");
+        setDetailStatus("");
 
       } catch (err) {
         console.error(err);
 
-        setStatus("Error occurred.");
+        setClubStatus("Error occurred.");
         alert(err.message);
       }
 
