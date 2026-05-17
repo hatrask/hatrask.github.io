@@ -160,9 +160,23 @@
     placeholder="Circle list page (0-1000)"
   />
 
-  <button id="searchBtn">
-    Search Clubs
-  </button>
+  <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+    <button id="searchBtn">
+      Start Search
+    </button>
+
+    <button id="pauseBtn" disabled>
+      Pause
+    </button>
+
+    <button id="resumeBtn" disabled>
+      Resume
+    </button>
+
+    <button id="stopBtn" disabled>
+      Stop
+    </button>
+  </div>
 
   <div class="status">
     <div id="clubStatus">Idle.</div>
@@ -198,10 +212,25 @@
 
     const apiKeyInput = document.getElementById("apiKey");
     const searchBtn = document.getElementById("searchBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const resumeBtn = document.getElementById("resumeBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
     const clubStatusBox = document.getElementById("clubStatus");
     const detailStatusBox = document.getElementById("detailStatus");
     const resultsBody = document.getElementById("resultsBody");
     const pageInput = document.getElementById("pageInput");
+
+    // Runtime state
+    let paused = false;
+    let stopped = false;
+    let activeCircles = [];
+    let processedIds = new Set();
+
+    const searchState = {
+      currentPage: 0,
+      currentClubIndex: 0
+    };
 
     function setClubStatus(text) {
       clubStatusBox.textContent = text;
@@ -237,6 +266,22 @@
 
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function waitIfPaused() {
+      while (paused && !stopped) {
+        await sleep(200);
+      }
+    }
+
+    function updateButtonStates({
+      searching = false,
+      pausedState = false
+    }) {
+      searchBtn.disabled = searching;
+      pauseBtn.disabled = !searching || pausedState;
+      resumeBtn.disabled = !pausedState;
+      stopBtn.disabled = !searching;
     }
 
     function clearTable() {
@@ -385,8 +430,20 @@
         return;
       }
 
+      paused = false;
+      stopped = false;
+
       clearTable();
-      searchBtn.disabled = true;
+
+      processedIds = new Set();
+
+      searchState.currentPage = page;
+      searchState.currentClubIndex = 0;
+
+      updateButtonStates({
+        searching: true,
+        pausedState: false
+      });
 
       try {
         setClubStatus(`Fetching clubs from page ${page}...`);
@@ -397,16 +454,25 @@
           apiKey
         );
 
-        const circles = circlesData.circles || [];
+        activeCircles = circlesData.circles || [];
 
-        // Prevent duplicate trainer entries
-        const processedIds = new Set();
+        for (
+          let i = searchState.currentClubIndex;
+          i < activeCircles.length;
+          i++
+        ) {
+          if (stopped) {
+            break;
+          }
 
-        for (let i = 0; i < circles.length; i++) {
-          const circle = circles[i];
+          await waitIfPaused();
+
+          searchState.currentClubIndex = i;
+
+          const circle = activeCircles[i];
 
           setClubStatus(
-            `Checking club ${i + 1}/${circles.length} (page ${page}): ${circle.name}`
+            `Checking club ${i + 1}/${activeCircles.length} (page ${page}): ${circle.name}`
           );
 
           try {
@@ -419,6 +485,11 @@
               details.circle.last_updated;
 
             for (const member of details.members) {
+              if (stopped) {
+                break;
+              }
+
+              await waitIfPaused();
 
               /*
                 Lower-ranked clubs are updated less frequently,
@@ -468,6 +539,7 @@
                   gain30d: rankingData.gain30d
                 });
 
+                await waitIfPaused();
                 await sleep(RANKING_DELAY_MS);
               }
             }
@@ -476,13 +548,21 @@
             console.error("Failed circle:", circle.circle_id, err);
           }
 
-          // Avoid hammering the API
-          if (i < circles.length - 1) {
+          if (
+            i < activeCircles.length - 1 &&
+            !stopped
+          ) {
+            await waitIfPaused();
             await sleep(REQUEST_DELAY_MS);
           }
         }
 
-        setClubStatus("Done.");
+        if (stopped) {
+          setClubStatus("Search stopped.");
+        } else {
+          setClubStatus("Done.");
+        }
+
         setDetailStatus("");
 
       } catch (err) {
@@ -492,10 +572,42 @@
         alert(err.message);
       }
 
-      searchBtn.disabled = false;
+      updateButtonStates({
+        searching: false,
+        pausedState: false
+      });
     }
 
     searchBtn.addEventListener("click", runSearch);
+
+    pauseBtn.addEventListener("click", () => {
+      paused = true;
+
+      setDetailStatus("Search paused.");
+
+      updateButtonStates({
+        searching: true,
+        pausedState: true
+      });
+    });
+
+    resumeBtn.addEventListener("click", () => {
+      paused = false;
+
+      setDetailStatus("");
+
+      updateButtonStates({
+        searching: true,
+        pausedState: false
+      });
+    });
+
+    stopBtn.addEventListener("click", () => {
+      stopped = true;
+      paused = false;
+
+      setDetailStatus("Stopping search...");
+    });
   </script>
 
 </body>
