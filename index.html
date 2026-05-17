@@ -165,7 +165,7 @@
     placeholder="E.g.: uma_k_nzM..."
   />
 
-  <p>Select a page (0 - 1000)</p>
+  <p>Club list page (0 - 1000)</p>
 
   <input
     id="pageInput"
@@ -173,12 +173,12 @@
     min="0"
     max="1000"
     value="0"
-    placeholder="Circle list page (0-1000)"
+    placeholder="Club list page (0-1000)"
   />
 
   <div style="display: flex; gap: 10px; margin-bottom: 16px;">
     <button id="searchBtn">
-      Start Search
+      Search
     </button>
 
     <button id="pauseBtn" disabled>
@@ -224,10 +224,8 @@
   <script>
     const API_BASE = "https://uma.moe/api/v4";
 
-    // Delay between club requests
+    // Small delay to avoid hammering the API
     const REQUEST_DELAY_MS = 2000;
-
-    // Delay between ranking lookups
     const RANKING_DELAY_MS = 500;
 
     const apiKeyInput = document.getElementById("apiKey");
@@ -250,15 +248,6 @@
     let stopped = false;
 
     let searchStatus = "idle";
-    /*
-      Possible states:
-
-      idle
-      running
-      paused
-      stopped
-      complete
-    */
 
     let activeCircles = [];
     let processedIds = new Set();
@@ -355,9 +344,7 @@
       return `"${String(value).replace(/"/g, '""')}"`;
     }
 
-    /*
-      Adds a new result row to the table.
-    */
+    // Adds a player entry to the results table
     function addRow(data) {
       resultsData.push(data);
 
@@ -405,10 +392,7 @@
       resultsBody.appendChild(row);
     }
 
-    /*
-      Wrapper around fetch() that automatically includes
-      the API key header required by uma.moe.
-    */
+    // Basic GET request helper for the uma.moe API
     async function fetchJson(url, apiKey) {
       const response = await fetch(url, {
         method: "GET",
@@ -425,10 +409,7 @@
       return await response.json();
     }
 
-    /*
-      Looks up a player's current club and recent gain stats
-      using the rankings/gains endpoint.
-    */
+    // Fetch current club and recent gains for a trainer
     async function fetchCurrentClub(viewerId, apiKey) {
       try {
         const data = await fetchJson(
@@ -546,16 +527,7 @@
       URL.revokeObjectURL(url);
     }
 
-    /*
-      Main search flow:
-
-      1. Fetch all clubs from a given page
-      2. Fetch members for each club
-      3. Compare member update date vs club update date
-      4. If they differ, treat member as a possible leaver
-      5. Look up the member's current club and gains
-      6. Add result to table
-    */
+    // Main search routine
     async function runSearch() {
       const apiKey = apiKeyInput.value.trim();
       const page = Number(pageInput.value);
@@ -634,10 +606,8 @@
               await waitIfPaused();
 
               /*
-                Compare member update dates against the club update date.
-
                 Page 0 clubs update very frequently, so even a
-                1-day difference is suspicious.
+                1-day difference can indicate a member left.
 
                 Lower-ranked pages update less often, so they
                 require at least a 2-day difference.
@@ -707,7 +677,7 @@
           setClubStatus("Search stopped.");
         } else {
           setSearchStatus("complete");
-          setClubStatus("Done.");
+          setClubStatus("Search complete.");
         }
 
         setDetailStatus("");
@@ -715,7 +685,9 @@
       } catch (err) {
         console.error(err);
 
+        setSearchStatus("idle");
         setClubStatus("Error occurred.");
+
         alert(err.message);
       }
     }
