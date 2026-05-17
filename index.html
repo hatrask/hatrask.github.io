@@ -134,11 +134,27 @@
         background: transparent;
       }
     }
+
+  .footer {
+    margin-top: 24px;
+
+    text-align: center;
+    font-size: 14px;
+    color: #888;
+  }
+
+  .footer a {
+    color: #7db4ff;
+    text-decoration: none;
+  }
+
+  .footer a:hover {
+    text-decoration: underline;
+  }
   </style>
 </head>
 
 <body>
-
   <h1>Uma Club Member Finder</h1>
 
   <p>Enter your uma.moe API key</p>
@@ -732,5 +748,15 @@
     exportBtn.addEventListener("click", exportResultsToCsv);
   </script>
 
+  <footer class="footer">
+    Project repository:
+    <a
+      href="https://github.com/hatrask/hatrask.github.io"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      github.com/hatrask/hatrask.github.io
+    </a>
+  </footer>
 </body>
 </html>
