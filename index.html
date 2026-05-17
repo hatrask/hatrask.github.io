@@ -73,6 +73,15 @@
       background: #1b1b1b;
     }
 
+    table a {
+      color: #7db4ff;
+      text-decoration: none;
+    }
+
+    table a:hover {
+      text-decoration: underline;
+    }
+
     thead th {
       position: sticky;
       top: 0;
@@ -364,9 +373,40 @@
         <td class="copyable-id" data-id="${data.viewerId}">
           ${data.viewerId}
         </td>
-        <td>${data.trainerName}</td>
-        <td>${data.previousCircleName}</td>
-        <td>${data.currentCircleName}</td>
+
+        <td>
+          <a
+            href="https://uma.moe/profile/${data.viewerId}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="color: #7db4ff;"
+          >
+            ${data.trainerName}
+          </a>
+        </td>
+
+        <td>
+          <a
+            href="https://uma.moe/circles/${data.previousCircleId}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="color: #7db4ff;"
+          >
+            ${data.previousCircleName}
+          </a>
+        </td>
+
+        <td>
+          <a
+            href="https://uma.moe/circles/${data.currentCircleId}"
+            target="_blank"
+            rel="noopener noreferrer"
+            style="color: #7db4ff;"
+          >
+            ${data.currentCircleName}
+          </a>
+        </td>
+
         <td>${formatGain(data.gain3d)}</td>
         <td>${formatGain(data.gain7d)}</td>
         <td>${formatGain(data.gain30d)}</td>
