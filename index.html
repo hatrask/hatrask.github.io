@@ -176,6 +176,10 @@
     <button id="stopBtn" disabled>
       Stop
     </button>
+
+    <button id="exportBtn" disabled>
+      Export CSV
+    </button>
   </div>
 
   <div class="status">
@@ -211,21 +215,38 @@
     const RANKING_DELAY_MS = 500;
 
     const apiKeyInput = document.getElementById("apiKey");
+
     const searchBtn = document.getElementById("searchBtn");
     const pauseBtn = document.getElementById("pauseBtn");
     const resumeBtn = document.getElementById("resumeBtn");
     const stopBtn = document.getElementById("stopBtn");
+    const exportBtn = document.getElementById("exportBtn");
 
     const clubStatusBox = document.getElementById("clubStatus");
     const detailStatusBox = document.getElementById("detailStatus");
+
     const resultsBody = document.getElementById("resultsBody");
+
     const pageInput = document.getElementById("pageInput");
 
     // Runtime state
     let paused = false;
     let stopped = false;
+
+    let searchStatus = "idle";
+    /*
+      Possible states:
+
+      idle
+      running
+      paused
+      stopped
+      complete
+    */
+
     let activeCircles = [];
     let processedIds = new Set();
+    let resultsData = [];
 
     const searchState = {
       currentPage: 0,
@@ -274,24 +295,50 @@
       }
     }
 
-    function updateButtonStates({
-      searching = false,
-      pausedState = false
-    }) {
-      searchBtn.disabled = searching;
-      pauseBtn.disabled = !searching || pausedState;
-      resumeBtn.disabled = !pausedState;
-      stopBtn.disabled = !searching;
+    function updateButtonStates() {
+      const isRunning = searchStatus === "running";
+      const isPaused = searchStatus === "paused";
+
+      searchBtn.disabled =
+        isRunning || isPaused;
+
+      pauseBtn.disabled = !isRunning;
+
+      resumeBtn.disabled = !isPaused;
+
+      stopBtn.disabled =
+        !(isRunning || isPaused);
+
+      exportBtn.disabled =
+        (isRunning || resultsData.length === 0);
+    }
+
+    function setSearchStatus(status) {
+      searchStatus = status;
+      updateButtonStates();
     }
 
     function clearTable() {
       resultsBody.innerHTML = "";
+      resultsData = [];
+    }
+
+    function formatGain(value) {
+      return typeof value === "number"
+        ? value.toLocaleString()
+        : value;
+    }
+
+    function escapeCsv(value) {
+      return `"${String(value).replace(/"/g, '""')}"`;
     }
 
     /*
       Adds a new result row to the table.
     */
     function addRow(data) {
+      resultsData.push(data);
+
       const row = document.createElement("tr");
 
       // Highlight rows where the player is still tied
@@ -311,9 +358,9 @@
         <td>${data.trainerName}</td>
         <td>${data.previousCircleName}</td>
         <td>${data.currentCircleName}</td>
-        <td>${data.gain3d.toLocaleString()}</td>
-        <td>${data.gain7d.toLocaleString()}</td>
-        <td>${data.gain30d.toLocaleString()}</td>
+        <td>${formatGain(data.gain3d)}</td>
+        <td>${formatGain(data.gain7d)}</td>
+        <td>${formatGain(data.gain30d)}</td>
       `;
 
       const idCell = row.querySelector(".copyable-id");
@@ -402,10 +449,85 @@
       }
     }
 
+    function exportResultsToCsv() {
+      if (resultsData.length === 0) {
+        return;
+      }
+
+      const headers = [
+        "viewer_id",
+        "trainer_name",
+
+        "previous_circle_id",
+        "previous_circle_name",
+
+        "current_circle_id",
+        "current_circle_name",
+
+        "gain_3d",
+        "gain_7d",
+        "gain_30d",
+
+        "same_club"
+      ];
+
+      const rows = resultsData.map(row => {
+        const sameClub =
+          row.previousCircleId &&
+          row.currentCircleId &&
+          String(row.previousCircleId) ===
+          String(row.currentCircleId);
+
+        return [
+          row.viewerId,
+          escapeCsv(row.trainerName),
+
+          row.previousCircleId,
+          escapeCsv(row.previousCircleName),
+
+          row.currentCircleId,
+          escapeCsv(row.currentCircleName),
+
+          row.gain3d,
+          row.gain7d,
+          row.gain30d,
+
+          sameClub
+        ];
+      });
+
+      const csv = [
+        headers.join(","),
+        ...rows.map(row => row.join(","))
+      ].join("\n");
+
+      const blob = new Blob(
+        [csv],
+        { type: "text/csv;charset=utf-8;" }
+      );
+
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+
+      link.href = url;
+
+      link.download =
+        `uma-club-search-page-${searchState.currentPage}.csv`;
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+    }
+
     /*
       Main search flow:
 
-      1. Fetch top 100 clubs
+      1. Fetch all clubs from a given page
       2. Fetch members for each club
       3. Compare member update date vs club update date
       4. If they differ, treat member as a possible leaver
@@ -433,17 +555,15 @@
       paused = false;
       stopped = false;
 
+      setSearchStatus("running");
+
       clearTable();
 
       processedIds = new Set();
+      activeCircles = [];
 
       searchState.currentPage = page;
       searchState.currentClubIndex = 0;
-
-      updateButtonStates({
-        searching: true,
-        pausedState: false
-      });
 
       try {
         setClubStatus(`Fetching clubs from page ${page}...`);
@@ -558,8 +678,10 @@
         }
 
         if (stopped) {
+          setSearchStatus("stopped");
           setClubStatus("Search stopped.");
         } else {
+          setSearchStatus("complete");
           setClubStatus("Done.");
         }
 
@@ -571,11 +693,6 @@
         setClubStatus("Error occurred.");
         alert(err.message);
       }
-
-      updateButtonStates({
-        searching: false,
-        pausedState: false
-      });
     }
 
     searchBtn.addEventListener("click", runSearch);
@@ -583,23 +700,17 @@
     pauseBtn.addEventListener("click", () => {
       paused = true;
 
-      setDetailStatus("Search paused.");
+      setSearchStatus("paused");
 
-      updateButtonStates({
-        searching: true,
-        pausedState: true
-      });
+      setDetailStatus("Search paused.");
     });
 
     resumeBtn.addEventListener("click", () => {
       paused = false;
 
-      setDetailStatus("");
+      setSearchStatus("running");
 
-      updateButtonStates({
-        searching: true,
-        pausedState: false
-      });
+      setDetailStatus("");
     });
 
     stopBtn.addEventListener("click", () => {
@@ -608,6 +719,8 @@
 
       setDetailStatus("Stopping search...");
     });
+
+    exportBtn.addEventListener("click", exportResultsToCsv);
   </script>
 
 </body>
