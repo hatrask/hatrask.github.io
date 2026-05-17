@@ -276,13 +276,19 @@
       return Math.floor(date.getTime() / 86400000);
     }
 
-    function isMemberPossiblyGone(memberLastUpdated, circleLastUpdated) {
+    function isMemberPossiblyGone(
+      memberLastUpdated,
+      circleLastUpdated,
+      page
+    ) {
       const memberDay = getDayNumber(memberLastUpdated);
       const circleDay = getDayNumber(circleLastUpdated);
 
-      // Only flag members whose update date is
-      // at least 2 full days behind the club.
-      return (circleDay - memberDay) >= 2;
+      const requiredDifference = page === 0
+        ? 1
+        : 2;
+
+      return (circleDay - memberDay) >= requiredDifference;
     }
 
     function sleep(ms) {
@@ -612,16 +618,19 @@
               await waitIfPaused();
 
               /*
-                Lower-ranked clubs are updated less frequently,
-                so a 1-day difference is normal.
+                Compare member update dates against the club update date.
 
-                Only flag members whose update date is
-                at least 2 full days older than the club.
+                Page 0 clubs update very frequently, so even a
+                1-day difference is suspicious.
+
+                Lower-ranked pages update less often, so they
+                require at least a 2-day difference.
               */
               if (
                 isMemberPossiblyGone(
                   member.last_updated,
-                  circleLastUpdated
+                  circleLastUpdated,
+                  page
                 )
               ) {
 
