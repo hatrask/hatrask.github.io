@@ -141,14 +141,27 @@
 
   <h1>Uma Club Member Finder</h1>
 
+  <p>Enter your uma.moe API key</p>
+
   <input
     id="apiKey"
     type="password"
-    placeholder="Enter your uma.moe API key"
+    placeholder="E.g.: uma_k_nzM..."
+  />
+
+  <p>Select a page (0 - 1000)</p>
+
+  <input
+    id="pageInput"
+    type="number"
+    min="0"
+    max="1000"
+    value="0"
+    placeholder="Circle list page (0-1000)"
   />
 
   <button id="searchBtn">
-    Search Top 100 Clubs
+    Search Clubs
   </button>
 
   <div class="status">
@@ -188,6 +201,7 @@
     const clubStatusBox = document.getElementById("clubStatus");
     const detailStatusBox = document.getElementById("detailStatus");
     const resultsBody = document.getElementById("resultsBody");
+    const pageInput = document.getElementById("pageInput");
 
     function setClubStatus(text) {
       clubStatusBox.textContent = text;
@@ -206,8 +220,19 @@
 
       Used to compare club update dates with member update dates.
     */
-    function extractDate(isoString) {
-      return isoString.split("T")[0];
+    function getDayNumber(isoString) {
+      const date = new Date(isoString);
+
+      return Math.floor(date.getTime() / 86400000);
+    }
+
+    function isMemberPossiblyGone(memberLastUpdated, circleLastUpdated) {
+      const memberDay = getDayNumber(memberLastUpdated);
+      const circleDay = getDayNumber(circleLastUpdated);
+
+      // Only flag members whose update date is
+      // at least 2 full days behind the club.
+      return (circleDay - memberDay) >= 2;
     }
 
     function sleep(ms) {
@@ -344,9 +369,19 @@
     */
     async function runSearch() {
       const apiKey = apiKeyInput.value.trim();
+      const page = Number(pageInput.value);
 
       if (!apiKey) {
         alert("Please provide an API key.");
+        return;
+      }
+
+      if (
+        Number.isNaN(page) ||
+        page < 0 ||
+        page > 1000
+      ) {
+        alert("Please enter a page between 0 and 1000.");
         return;
       }
 
@@ -354,11 +389,11 @@
       searchBtn.disabled = true;
 
       try {
-        setClubStatus("Fetching top 100 clubs...");
+        setClubStatus(`Fetching clubs from page ${page}...`);
         setDetailStatus("");
 
         const circlesData = await fetchJson(
-          `${API_BASE}/circles/list?page=0`,
+          `${API_BASE}/circles/list?page=${page}`,
           apiKey
         );
 
@@ -371,7 +406,7 @@
           const circle = circles[i];
 
           setClubStatus(
-            `Checking club ${i + 1}/${circles.length}: ${circle.name}`
+            `Checking club ${i + 1}/${circles.length} (page ${page}): ${circle.name}`
           );
 
           try {
@@ -380,20 +415,24 @@
               apiKey
             );
 
-            const circleDate = extractDate(
-              details.circle.last_updated
-            );
+            const circleLastUpdated =
+              details.circle.last_updated;
 
             for (const member of details.members) {
-              const memberDate = extractDate(
-                member.last_updated
-              );
 
               /*
-                If the member update date differs from the club update date,
-                the member likely left the club.
+                Lower-ranked clubs are updated less frequently,
+                so a 1-day difference is normal.
+
+                Only flag members whose update date is
+                at least 2 full days older than the club.
               */
-              if (memberDate !== circleDate) {
+              if (
+                isMemberPossiblyGone(
+                  member.last_updated,
+                  circleLastUpdated
+                )
+              ) {
 
                 if (processedIds.has(member.viewer_id)) {
                   continue;
