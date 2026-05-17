@@ -218,26 +218,28 @@
     function addRow(data) {
       const row = document.createElement("tr");
 
-      // Highlight players whose current club matches the previous club
-      if (data.previousCircle === data.currentCircle) {
+      // Highlight rows where the player is still tied
+      // to the same club ID in rankings data.
+      if (
+        data.previousCircleId &&
+        data.currentCircleId &&
+        String(data.previousCircleId) === String(data.currentCircleId)
+      ) {
         row.classList.add("same-club-row");
       }
 
       row.innerHTML = `
-        <td class="copyable-id">
+        <td class="copyable-id" data-id="${data.viewerId}">
           ${data.viewerId}
         </td>
-
         <td>${data.trainerName}</td>
-        <td>${data.previousCircle}</td>
-        <td>${data.currentCircle}</td>
-
+        <td>${data.previousCircleName}</td>
+        <td>${data.currentCircleName}</td>
         <td>${data.gain3d.toLocaleString()}</td>
         <td>${data.gain7d.toLocaleString()}</td>
         <td>${data.gain30d.toLocaleString()}</td>
       `;
 
-      // Clicking the trainer ID copies it to clipboard
       const idCell = row.querySelector(".copyable-id");
 
       idCell.addEventListener("click", async () => {
@@ -293,9 +295,10 @@
           return null;
         }
 
-        // Exact viewer_id match
+        // rankings/gains can return partial matches,
+        // so we make sure the viewer_id matches exactly.
         const player = data.rankings.find(
-          entry => String(entry.viewer_id) === String(viewerId)
+          ranking => String(ranking.viewer_id) === String(viewerId)
         );
 
         if (!player) {
@@ -303,6 +306,7 @@
         }
 
         return {
+          circleId: player.circle_id ?? null,
           circleName: player.circle_name || "No Club",
           gain3d: player.gain_3d ?? 0,
           gain7d: player.gain_7d ?? 0,
@@ -313,6 +317,7 @@
         console.error("Ranking lookup failed:", viewerId, err);
 
         return {
+          circleId: null,
           circleName: "Error",
           gain3d: "-",
           gain7d: "-",
@@ -405,8 +410,13 @@
                 addRow({
                   viewerId: member.viewer_id,
                   trainerName: member.trainer_name,
-                  previousCircle: circle.name,
-                  currentCircle: rankingData.circleName,
+
+                  previousCircleId: circle.circle_id,
+                  previousCircleName: circle.name,
+
+                  currentCircleId: rankingData.circleId,
+                  currentCircleName: rankingData.circleName,
+
                   gain3d: rankingData.gain3d,
                   gain7d: rankingData.gain7d,
                   gain30d: rankingData.gain30d
