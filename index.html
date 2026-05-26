@@ -116,6 +116,14 @@
       background: rgba(255, 215, 0, 0.2);
     }
 
+    .existing-player-row {
+      background: rgba(100, 180, 255, 0.12);
+    }
+
+    .existing-player-row:hover {
+      background: rgba(100, 180, 255, 0.2);
+    }
+
     /*
       Trainer IDs can be clicked to copy them to clipboard.
     */
@@ -185,6 +193,14 @@
     placeholder="Club list page (0-1000)"
   />
 
+  <p>Load a CSV file for comparison (Optional)</p>
+
+  <input
+    id="csvInput"
+    type="file"
+    accept=".csv"
+  />
+
   <div style="display: flex; gap: 10px; margin-bottom: 16px;">
     <button id="searchBtn">
       Search
@@ -251,6 +267,7 @@
     const resultsBody = document.getElementById("resultsBody");
 
     const pageInput = document.getElementById("pageInput");
+    const csvInput = document.getElementById("csvInput");
 
     // Runtime state
     let paused = false;
@@ -261,6 +278,7 @@
     let activeCircles = [];
     let processedIds = new Set();
     let resultsData = [];
+    let comparisonCsvRows = [];
 
     const searchState = {
       currentPage: 0,
@@ -330,7 +348,13 @@
         !(isRunning || isPaused);
 
       exportBtn.disabled =
-        (isRunning || resultsData.length === 0);
+        (
+          isRunning ||
+          (
+            resultsData.length === 0 &&
+            comparisonCsvRows.length === 0
+          )
+        );
     }
 
     function setSearchStatus(status) {
@@ -353,14 +377,58 @@
       return `"${String(value).replace(/"/g, '""')}"`;
     }
 
+    async function loadComparisonCsv() {
+      const file = csvInput.files[0];
+
+      if (!file) {
+        comparisonCsvRows = [];
+        return;
+      }
+
+      const text = await file.text();
+
+      const lines = text
+        .split(/\r?\n/)
+        .filter(line => line.trim().length > 0);
+
+      // Remove header row
+      lines.shift();
+
+      comparisonCsvRows = lines.map(line => {
+        const columns = line
+          .match(/("(?:[^"]|"")*"|[^,]+)/g)
+          ?.map(value =>
+            value.replace(/^"|"$/g, "")
+          ) || [];
+
+        return {
+          viewerId: columns[0],
+          trainerName: columns[1],
+
+          previousCircleId: columns[2],
+          previousCircleName: columns[3],
+
+          currentCircleId: columns[4],
+          currentCircleName: columns[5],
+
+          gain3d: columns[6],
+          gain7d: columns[7],
+          gain30d: columns[8]
+        };
+      });
+    }
+
     // Adds a player entry to the results table
-    function addRow(data) {
+    function addRow(data, options = {}) {
       resultsData.push(data);
 
       const row = document.createElement("tr");
+      if (options.isExistingPlayer) {
+        row.classList.add("existing-player-row");
+      }
 
-      // Highlight rows where the player is still tied
-      // to the same club ID in rankings data.
+      // Highlight rows where the previous and current
+      // club IDs still match.
       if (
         data.previousCircleId &&
         data.currentCircleId &&
@@ -493,26 +561,29 @@
     }
 
     function exportResultsToCsv() {
-      if (resultsData.length === 0) {
-        return;
-      }
-
-      const headers = [
-        "viewer_id",
-        "trainer_name",
-
-        "previous_circle_id",
-        "previous_circle_name",
-
-        "current_circle_id",
-        "current_circle_name",
-
-        "gain_3d",
-        "gain_7d",
-        "gain_30d"
+      const exportRows = [
+        ...comparisonCsvRows,
+        ...resultsData
       ];
 
-      const rows = resultsData
+      // Prevent duplicate trainer entries
+      const uniqueRows = [];
+      const seenIds = new Set();
+
+      for (const row of exportRows) {
+        const viewerId = String(row.viewerId);
+
+        if (seenIds.has(viewerId)) {
+          continue;
+        }
+
+        seenIds.add(viewerId);
+        uniqueRows.push(row);
+      }
+
+      // Only export players whose previous/current
+      // club IDs still match.
+      const rows = uniqueRows
         .filter(row =>
           row.previousCircleId &&
           row.currentCircleId &&
@@ -533,6 +604,26 @@
           row.gain7d,
           row.gain30d
         ]);
+
+      if (rows.length === 0) {
+        alert("No available players to export.");
+        return;
+      }
+
+      const headers = [
+        "viewer_id",
+        "trainer_name",
+
+        "previous_circle_id",
+        "previous_circle_name",
+
+        "current_circle_id",
+        "current_circle_name",
+
+        "gain_3d",
+        "gain_7d",
+        "gain_30d"
+      ];
 
       const csv = [
         headers.join(","),
@@ -585,6 +676,8 @@
       stopped = false;
 
       setSearchStatus("running");
+
+      await loadComparisonCsv();
 
       clearTable();
 
@@ -672,6 +765,43 @@
 
                 if (!rankingData) {
                   continue;
+                }
+
+                const existingCsvEntry = comparisonCsvRows.find(
+                  row => String(row.viewerId) === String(member.viewer_id)
+                );
+
+                if (existingCsvEntry) {
+                  const stillAvailable =
+                    String(existingCsvEntry.currentCircleId) ===
+                    String(rankingData.circleId);
+
+                  if (stillAvailable) {
+                    addRow({
+                      viewerId: member.viewer_id,
+                      trainerName: member.trainer_name,
+
+                      previousCircleId: circle.circle_id,
+                      previousCircleName: circle.name,
+
+                      currentCircleId: rankingData.circleId,
+                      currentCircleName: rankingData.circleName,
+
+                      gain3d: rankingData.gain3d,
+                      gain7d: rankingData.gain7d,
+                      gain30d: rankingData.gain30d
+                    }, {
+                      isExistingPlayer: true
+                    });
+
+                    continue;
+                  }
+
+                  // Joined a new club.
+                  // Remove them from the CSV.
+                  comparisonCsvRows = comparisonCsvRows.filter(
+                    row => String(row.viewerId) !== String(member.viewer_id)
+                  );
                 }
 
                 addRow({
