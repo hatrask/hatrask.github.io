@@ -509,19 +509,17 @@
 
         "gain_3d",
         "gain_7d",
-        "gain_30d",
-
-        "same_club"
+        "gain_30d"
       ];
 
-      const rows = resultsData.map(row => {
-        const sameClub =
+      const rows = resultsData
+        .filter(row =>
           row.previousCircleId &&
           row.currentCircleId &&
           String(row.previousCircleId) ===
-          String(row.currentCircleId);
-
-        return [
+          String(row.currentCircleId)
+        )
+        .map(row => [
           row.viewerId,
           escapeCsv(row.trainerName),
 
@@ -533,11 +531,8 @@
 
           row.gain3d,
           row.gain7d,
-          row.gain30d,
-
-          sameClub
-        ];
-      });
+          row.gain30d
+        ]);
 
       const csv = [
         headers.join(","),
