@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Web Ebook Reader</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+
+
+    <style>
+
+        /* =========================
+           Theme
+           ========================= */
+
+        :root {
+
+            --background: #f3f2f0;
+            --paper: #ffffff;
+            --text: #292827;
+            --muted: #77736f;
+            --border: #d8d5d1;
+
+            --accent: #55514d;
+            --accent-hover: #3f3c39;
+
+            --button-background: #65615d;
+
+            --code-background: #eeece9;
+            --blockquote-background: #f1efed;
+
+            --shadow: rgba(0, 0, 0, 0.08);
+        }
+
+
+        /*
+         * Dark theme.
+         */
+        html.dark {
+
+            --background: #171717;
+            --paper: #202020;
+            --text: #e7e4e1;
+            --muted: #aaa6a2;
+            --border: #3a3836;
+
+            --accent: #b4b0ac;
+            --accent-hover: #d0ccc8;
+
+            --button-background: #44413e;
+
+            --code-background: #2b2927;
+            --blockquote-background: #292725;
+
+            --shadow: rgba(0, 0, 0, 0.35);
+        }
+
+
+        /* =========================
+           Global
+           ========================= */
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+
+        body {
+
+            margin: 0;
+
+            background: var(--background);
+
+            color: var(--text);
+
+            font-family:
+                Georgia,
+                "Times New Roman",
+                serif;
+
+            line-height: 1.75;
+
+            transition:
+                background-color 0.2s ease,
+                color 0.2s ease;
+        }
+
+
+        button,
+        input {
+            font: inherit;
+        }
+
+
+        button {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+
+        /* =========================
+           Upload screen
+           ========================= */
+
+        #upload-screen {
+
+            min-height: 100vh;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            padding: 24px;
+        }
+
+
+        .upload-box {
+
+            width: 100%;
+
+            max-width: 520px;
+
+            padding: 42px 32px;
+
+            background: var(--paper);
+
+            border: 1px solid var(--border);
+
+            border-radius: 12px;
+
+            box-shadow:
+                0 10px 35px var(--shadow);
+
+            text-align: center;
+        }
+
+
+        .upload-box h1 {
+
+            margin-top: 0;
+
+            margin-bottom: 10px;
+
+            font-size: 32px;
+        }
+
+
+        .upload-box p {
+
+            margin-top: 0;
+
+            margin-bottom: 28px;
+
+            color: var(--muted);
+        }
+
+
+        .file-label {
+
+            display: inline-block;
+
+            padding: 12px 22px;
+
+            border-radius: 7px;
+
+            background: var(--button-background);
+
+            color: #ffffff;
+
+            font-family: system-ui, sans-serif;
+
+            font-weight: 600;
+
+            cursor: pointer;
+
+            transition:
+                background-color 0.15s ease,
+                transform 0.15s ease;
+        }
+
+
+        .file-label:hover {
+
+            background: var(--accent-hover);
+
+            transform: translateY(-1px);
+        }
+
+
+        #zip-file {
+            display: none;
+        }
+
+
+        #upload-error {
+
+            margin-top: 20px;
+
+            color: #c54848;
+
+            font-family: system-ui, sans-serif;
+
+            display: none;
+        }
+
+
+        /* =========================
+           Reader
+           ========================= */
+
+        #reader {
+
+            display: none;
+
+            min-height: 100vh;
+        }
+
+
+        /* =========================
+           Top bar
+           ========================= */
+
+        .top-bar {
+
+            position: fixed;
+
+            top: 0;
+
+            left: 0;
+
+            right: 0;
+
+            z-index: 1000;
+
+            height: 58px;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            padding:
+                0 18px;
+
+            background: var(--paper);
+
+            color: var(--text);
+
+            border-bottom:
+                1px solid var(--border);
+
+            box-shadow:
+                0 2px 10px var(--shadow);
+        }
+
+
+        .book-title {
+
+            flex: 1;
+
+            min-width: 0;
+
+            overflow: hidden;
+
+            white-space: nowrap;
+
+            text-overflow: ellipsis;
+
+            font-family: system-ui, sans-serif;
+
+            font-weight: 700;
+
+            font-size: 16px;
+        }
+
+
+        .top-button {
+
+            flex-shrink: 0;
+
+            border:
+                1px solid var(--border);
+
+            border-radius: 6px;
+
+            padding:
+                7px 11px;
+
+            background:
+                var(--background);
+
+            color: var(--text);
+
+            cursor: pointer;
+
+            font-family: system-ui, sans-serif;
+
+            font-size: 14px;
+
+            transition:
+                background-color 0.15s ease,
+                border-color 0.15s ease;
+        }
+
+
+        .top-button:hover {
+
+            background:
+                var(--code-background);
+
+            border-color:
+                var(--accent);
+        }
+
+
+        /* =========================
+           Progress bar
+           ========================= */
+
+        #progress-bar {
+
+            position: fixed;
+
+            top: 58px;
+
+            left: 0;
+
+            z-index: 999;
+
+            height: 3px;
+
+            width: 0%;
+
+            background: var(--accent);
+        }
+
+
+        /* =========================
+           Chapter menu
+           ========================= */
+
+        #chapter-menu {
+
+            position: fixed;
+
+            top: 66px;
+
+            right: 12px;
+
+            z-index: 1001;
+
+            display: none;
+
+            width:
+                min(
+                    340px,
+                    calc(100vw - 24px)
+                );
+
+            max-height: 75vh;
+
+            overflow-y: auto;
+
+            padding: 8px;
+
+            background: var(--paper);
+
+            border:
+                1px solid var(--border);
+
+            border-radius: 8px;
+
+            box-shadow:
+                0 10px 30px var(--shadow);
+        }
+
+
+        #chapter-menu.open {
+            display: block;
+        }
+
+
+        .chapter-menu-item {
+
+            display: block;
+
+            width: 100%;
+
+            padding:
+                10px 12px;
+
+            border: none;
+
+            border-radius: 5px;
+
+            background: transparent;
+
+            color: var(--text);
+
+            text-align: left;
+
+            cursor: pointer;
+
+            font-family: system-ui, sans-serif;
+
+            font-size: 14px;
+        }
+
+
+        .chapter-menu-item:hover {
+
+            background:
+                var(--background);
+        }
+
+
+        /* =========================
+           Book content
+           ========================= */
+
+        #book-content {
+
+            width: 100%;
+
+            max-width: 900px;
+
+            margin: 0 auto;
+
+            padding:
+                90px 24px 100px;
+        }
+
+
+        /* =========================
+           Cover
+           ========================= */
+
+        .cover {
+
+            min-height:
+                calc(100vh - 130px);
+
+            display: flex;
+
+            flex-direction: column;
+
+            align-items: center;
+
+            justify-content: center;
+
+            text-align: center;
+
+            padding:
+                30px 0 70px;
+        }
+
+
+        .cover img {
+
+            display: block;
+
+            max-width:
+                min(100%, 550px);
+
+            max-height: 75vh;
+
+            width: auto;
+
+            height: auto;
+
+            object-fit: contain;
+
+            border-radius: 4px;
+
+            box-shadow:
+                0 12px 35px var(--shadow);
+        }
+
+
+        .cover-title {
+
+            margin-top: 28px;
+
+            margin-bottom: 0;
+
+            font-size:
+                clamp(
+                    26px,
+                    5vw,
+                    42px
+                );
+
+            line-height: 1.25;
+        }
+
+
+        /* =========================
+           Chapters
+           ========================= */
+
+        .chapter {
+
+            margin-bottom: 100px;
+        }
+
+
+        .chapter h1 {
+
+            margin-top: 0;
+
+            margin-bottom: 50px;
+
+            padding-bottom: 18px;
+
+            border-bottom:
+                2px solid var(--border);
+
+            font-size:
+                clamp(
+                    30px,
+                    5vw,
+                    42px
+                );
+
+            line-height: 1.25;
+
+            scroll-margin-top: 90px;
+        }
+
+
+        .chapter h2 {
+
+            margin-top: 2.2em;
+
+            margin-bottom: 0.8em;
+
+            font-size: 1.7em;
+
+            line-height: 1.3;
+        }
+
+
+        .chapter h3 {
+
+            margin-top: 2em;
+
+            margin-bottom: 0.7em;
+
+            font-size: 1.35em;
+
+            line-height: 1.35;
+        }
+
+
+        .chapter p {
+
+            margin:
+                0 0 1.25em;
+        }
+
+
+        .chapter img {
+
+            display: block;
+
+            max-width: 100%;
+
+            height: auto;
+
+            margin:
+                2em auto;
+        }
+
+
+        .chapter a {
+
+            color: var(--accent);
+        }
+
+
+        html.dark .chapter a {
+
+            color: #c5c1bd;
+        }
+
+
+        .chapter hr {
+
+            margin:
+                3em 0;
+
+            border: none;
+
+            border-top:
+                1px solid var(--border);
+        }
+
+
+        .chapter blockquote {
+
+            margin:
+                1.5em 0;
+
+            padding:
+                10px 20px;
+
+            background:
+                var(--blockquote-background);
+
+            border-left:
+                4px solid var(--accent);
+
+            color: var(--muted);
+        }
+
+
+        .chapter code {
+
+            padding:
+                2px 5px;
+
+            border-radius: 4px;
+
+            background:
+                var(--code-background);
+
+            font-size: 0.9em;
+        }
+
+
+        .chapter pre {
+
+            overflow-x: auto;
+
+            padding: 16px;
+
+            border-radius: 7px;
+
+            background:
+                var(--code-background);
+        }
+
+
+        .chapter pre code {
+
+            padding: 0;
+
+            background: transparent;
+        }
+
+
+        .chapter ul,
+        .chapter ol {
+
+            margin-bottom: 1.4em;
+        }
+
+
+        .chapter table {
+
+            width: 100%;
+
+            border-collapse: collapse;
+
+            margin:
+                1.5em 0;
+        }
+
+
+        .chapter th,
+        .chapter td {
+
+            padding:
+                8px 10px;
+
+            border:
+                1px solid var(--border);
+
+            text-align: left;
+        }
+
+
+        .chapter th {
+
+            background:
+                var(--code-background);
+        }
+
+
+        /* =========================
+           Mobile
+           ========================= */
+
+        @media (max-width: 600px) {
+
+            .top-bar {
+
+                padding:
+                    0 10px;
+
+                gap: 7px;
+            }
+
+
+            .book-title {
+
+                font-size: 14px;
+            }
+
+
+            .top-button {
+
+                padding:
+                    7px 9px;
+
+                font-size: 13px;
+            }
+
+
+            #book-content {
+
+                padding:
+                    82px 18px 70px;
+            }
+
+
+            .chapter {
+
+                margin-bottom: 75px;
+            }
+
+
+            .chapter h1 {
+
+                margin-bottom: 35px;
+            }
+
+
+            .cover {
+
+                min-height:
+                    calc(100vh - 100px);
+            }
+
+
+            .upload-box {
+
+                padding:
+                    32px 22px;
+            }
+
+
+            .upload-box h1 {
+
+                font-size: 27px;
+            }
+        }
+
+    </style>
+</head>
+
+
+<body>
+
+
+    <!-- =========================
+         Upload screen
+         ========================= -->
+
+    <div id="upload-screen">
+
+        <div class="upload-box">
+
+            <h1>Web Ebook Reader</h1>
+
+            <p>
+                Select a ZIP file containing your book.
+                Everything is processed locally in your browser.
+            </p>
+
+            <label
+                class="file-label"
+                for="zip-file"
+            >
+                Open ZIP Book
+            </label>
+
+            <input
+                type="file"
+                id="zip-file"
+                accept=".zip"
+            >
+
+            <div id="upload-error"></div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         Reader
+         ========================= -->
+
+    <div id="reader">
+
+
+        <header class="top-bar">
+
+            <div
+                class="book-title"
+                id="book-title"
+            >
+                Book
+            </div>
+
+
+            <button
+                class="top-button"
+                id="theme-button"
+                type="button"
+                title="Toggle dark mode"
+            >
+                Dark
+            </button>
+
+
+            <button
+                class="top-button"
+                id="chapter-button"
+                type="button"
+            >
+                Chapters
+            </button>
+
+
+            <button
+                class="top-button"
+                id="open-another-button"
+                type="button"
+            >
+                Open
+            </button>
+
+        </header>
+
+
+        <div id="progress-bar"></div>
+
+
+        <nav id="chapter-menu"></nav>
+
+
+        <main id="book-content"></main>
+
+    </div>
+
+
+    <script>
+
+        /* =========================
+           Global state
+           ========================= */
+
+        let zip = null;
+
+        let chapters = [];
+
+        let bookTitle = "";
+
+        let currentBookKey = "";
+
+
+        /*
+         * Used to avoid writing to localStorage
+         * excessively while scrolling.
+         */
+        let savePositionTimeout = null;
+
+
+        /* =========================
+           Elements
+           ========================= */
+
+        const uploadScreen =
+            document.getElementById(
+                "upload-screen"
+            );
+
+        const reader =
+            document.getElementById(
+                "reader"
+            );
+
+        const zipInput =
+            document.getElementById(
+                "zip-file"
+            );
+
+        const uploadError =
+            document.getElementById(
+                "upload-error"
+            );
+
+        const bookTitleElement =
+            document.getElementById(
+                "book-title"
+            );
+
+        const chapterMenu =
+            document.getElementById(
+                "chapter-menu"
+            );
+
+        const chapterButton =
+            document.getElementById(
+                "chapter-button"
+            );
+
+        const themeButton =
+            document.getElementById(
+                "theme-button"
+            );
+
+        const openAnotherButton =
+            document.getElementById(
+                "open-another-button"
+            );
+
+        const progressBar =
+            document.getElementById(
+                "progress-bar"
+            );
+
+
+        /* =========================
+           Theme
+           ========================= */
+
+        function updateThemeButton() {
+
+            const isDark =
+                document.documentElement
+                    .classList
+                    .contains("dark");
+
+
+            themeButton.textContent =
+                isDark
+                    ? "Light"
+                    : "Dark";
+
+
+            themeButton.title =
+                isDark
+                    ? "Switch to light mode"
+                    : "Switch to dark mode";
+        }
+
+
+        function setTheme(theme) {
+
+            if (theme === "dark") {
+
+                document.documentElement
+                    .classList
+                    .add("dark");
+
+                localStorage.setItem(
+                    "ebook-reader-theme",
+                    "dark"
+                );
+
+            } else {
+
+                document.documentElement
+                    .classList
+                    .remove("dark");
+
+                localStorage.setItem(
+                    "ebook-reader-theme",
+                    "light"
+                );
+            }
+
+
+            updateThemeButton();
+        }
+
+
+        function loadTheme() {
+
+            const savedTheme =
+                localStorage.getItem(
+                    "ebook-reader-theme"
+                );
+
+
+            if (savedTheme === "dark") {
+
+                setTheme("dark");
+
+                return;
+            }
+
+
+            if (savedTheme === "light") {
+
+                setTheme("light");
+
+                return;
+            }
+
+
+            const prefersDark =
+                window.matchMedia &&
+                window.matchMedia(
+                    "(prefers-color-scheme: dark)"
+                ).matches;
+
+
+            setTheme(
+                prefersDark
+                    ? "dark"
+                    : "light"
+            );
+        }
+
+
+        themeButton.addEventListener(
+            "click",
+            () => {
+
+                const isDark =
+                    document.documentElement
+                        .classList
+                        .contains("dark");
+
+
+                setTheme(
+                    isDark
+                        ? "light"
+                        : "dark"
+                );
+            }
+        );
+
+
+        loadTheme();
+
+
+        /* =========================
+           Reading position
+           ========================= */
+
+        /*
+         * Create a safe localStorage key from
+         * the ZIP filename.
+         *
+         * Example:
+         *
+         * My Novel.zip
+         *
+         * becomes:
+         *
+         * ebook-reader-position-My%20Novel.zip
+         */
+        function getReadingPositionKey() {
+
+            return (
+                "ebook-reader-position-" +
+                encodeURIComponent(
+                    currentBookKey
+                )
+            );
+        }
+
+
+        function saveReadingPosition() {
+
+            if (!currentBookKey) {
+                return;
+            }
+
+
+            /*
+             * Delay the save slightly so that
+             * rapid scrolling doesn't constantly
+             * write to localStorage.
+             */
+            clearTimeout(
+                savePositionTimeout
+            );
+
+
+            savePositionTimeout =
+                setTimeout(
+                    () => {
+
+                        const position = {
+                            scrollY:
+                                window.scrollY,
+
+                            progress:
+                                getReadingProgress()
+                        };
+
+
+                        localStorage.setItem(
+                            getReadingPositionKey(),
+                            JSON.stringify(position)
+                        );
+
+                    },
+                    250
+                );
+        }
+
+
+        function getSavedReadingPosition() {
+
+            if (!currentBookKey) {
+                return null;
+            }
+
+
+            const saved =
+                localStorage.getItem(
+                    getReadingPositionKey()
+                );
+
+
+            if (!saved) {
+                return null;
+            }
+
+
+            try {
+
+                return JSON.parse(saved);
+
+            } catch (error) {
+
+                console.warn(
+                    "Could not read saved position.",
+                    error
+                );
+
+                return null;
+            }
+        }
+
+
+        function restoreReadingPosition() {
+
+            const position =
+                getSavedReadingPosition();
+
+
+            if (
+                !position ||
+                typeof position.scrollY !== "number"
+            ) {
+                window.scrollTo(
+                    0,
+                    0
+                );
+
+                return;
+            }
+
+
+            /*
+             * Wait until the browser has laid out
+             * the entire rendered book.
+             */
+            requestAnimationFrame(
+                () => {
+
+                    requestAnimationFrame(
+                        () => {
+
+                            const maxScroll =
+                                document.documentElement
+                                    .scrollHeight -
+                                window.innerHeight;
+
+
+                            const scrollY =
+                                Math.min(
+                                    position.scrollY,
+                                    Math.max(
+                                        0,
+                                        maxScroll
+                                    )
+                                );
+
+
+                            window.scrollTo(
+                                0,
+                                scrollY
+                            );
+
+
+                            updateProgressBar();
+                        }
+                    );
+                }
+            );
+        }
+
+
+        function getReadingProgress() {
+
+            const documentHeight =
+                document.documentElement
+                    .scrollHeight -
+                window.innerHeight;
+
+
+            if (documentHeight <= 0) {
+                return 0;
+            }
+
+
+            return (
+                window.scrollY /
+                documentHeight
+            );
+        }
+
+
+        /* =========================
+           File handling
+           ========================= */
+
+        zipInput.addEventListener(
+            "change",
+            async event => {
+
+                const file =
+                    event.target.files[0];
+
+
+                if (!file) {
+                    return;
+                }
+
+
+                await openBook(file);
+            }
+        );
+
+
+        openAnotherButton.addEventListener(
+            "click",
+            () => {
+
+                /*
+                 * Save the current location before
+                 * leaving the current book.
+                 */
+                saveReadingPosition();
+
+
+                zipInput.value = "";
+
+
+                reader.style.display =
+                    "none";
+
+
+                uploadScreen.style.display =
+                    "flex";
+
+
+                chapterMenu.classList.remove(
+                    "open"
+                );
+
+
+                window.scrollTo(
+                    0,
+                    0
+                );
+            }
+        );
+
+
+        /* =========================
+           Open book
+           ========================= */
+
+        async function openBook(file) {
+
+            uploadError.style.display =
+                "none";
+
+
+            try {
+
+                zip =
+                    await JSZip.loadAsync(
+                        file
+                    );
+
+
+                /*
+                 * The ZIP filename is our
+                 * persistent identifier.
+                 */
+                bookTitle =
+                    file.name.replace(
+                        /\.zip$/i,
+                        ""
+                    );
+
+
+                currentBookKey =
+                    file.name;
+
+
+                /*
+                 * Find Markdown files inside book/.
+                 */
+                chapters =
+                    Object.values(
+                        zip.files
+                    )
+                    .filter(
+                        entry => {
+
+                            if (entry.dir) {
+                                return false;
+                            }
+
+
+                            const normalized =
+                                entry.name
+                                    .replace(
+                                        /\\/g,
+                                        "/"
+                                    );
+
+
+                            return (
+                                normalized
+                                    .toLowerCase()
+                                    .startsWith(
+                                        "book/"
+                                    ) &&
+                                normalized
+                                    .toLowerCase()
+                                    .endsWith(
+                                        ".md"
+                                    )
+                            );
+                        }
+                    )
+                    .sort(
+                        (a, b) => {
+
+                            return a.name.localeCompare(
+                                b.name,
+                                undefined,
+                                {
+                                    numeric: true,
+
+                                    sensitivity:
+                                        "base"
+                                }
+                            );
+                        }
+                    );
+
+
+                if (
+                    chapters.length === 0
+                ) {
+
+                    throw new Error(
+                        "No Markdown files were found inside the book/ folder."
+                    );
+                }
+
+
+                /*
+                 * Find cover.png.
+                 */
+                const coverEntry =
+                    Object.values(
+                        zip.files
+                    )
+                    .find(
+                        entry => {
+
+                            if (entry.dir) {
+                                return false;
+                            }
+
+
+                            const filename =
+                                entry.name
+                                    .replace(
+                                        /\\/g,
+                                        "/"
+                                    )
+                                    .split("/")
+                                    .pop();
+
+
+                            return (
+                                filename
+                                    .toLowerCase() ===
+                                "cover.png"
+                            );
+                        }
+                    );
+
+
+                bookTitleElement.textContent =
+                    bookTitle;
+
+
+                uploadScreen.style.display =
+                    "none";
+
+
+                reader.style.display =
+                    "block";
+
+
+                await renderBook(
+                    coverEntry
+                );
+
+
+                /*
+                 * Restore the previous position
+                 * for this particular ZIP.
+                 */
+                restoreReadingPosition();
+
+            } catch (error) {
+
+                console.error(error);
+
+
+                uploadError.textContent =
+                    error.message ||
+                    "Could not open this ZIP file.";
+
+
+                uploadError.style.display =
+                    "block";
+            }
+        }
+
+
+        /* =========================
+           Chapter name
+           ========================= */
+
+        function cleanChapterName(
+            filename
+        ) {
+
+            /*
+             * Remove numeric prefixes.
+             *
+             * 001 - Prologue
+             * 002 - Chapter 1
+             * 003_Chapter 2
+             */
+            let name =
+                filename.replace(
+                    /^\s*\d+\s*[-_.]?\s*/,
+                    ""
+                );
+
+
+            name =
+                name.replace(
+                    /_/g,
+                    " "
+                );
+
+
+            name =
+                name.replace(
+                    /\s+/g,
+                    " "
+                )
+                .trim();
+
+
+            return name;
+        }
+
+
+        /* =========================
+           Render book
+           ========================= */
+
+        async function renderBook(
+            coverEntry
+        ) {
+
+            const container =
+                document.getElementById(
+                    "book-content"
+                );
+
+
+            container.innerHTML = "";
+
+
+            /*
+             * Cover
+             */
+            if (coverEntry) {
+
+                const coverBlob =
+                    await coverEntry.async(
+                        "blob"
+                    );
+
+
+                const coverUrl =
+                    URL.createObjectURL(
+                        coverBlob
+                    );
+
+
+                const cover =
+                    document.createElement(
+                        "section"
+                    );
+
+
+                cover.className =
+                    "cover";
+
+
+                cover.id =
+                    "cover";
+
+
+                const coverImage =
+                    document.createElement(
+                        "img"
+                    );
+
+
+                coverImage.src =
+                    coverUrl;
+
+
+                coverImage.alt =
+                    "Book cover";
+
+
+                const coverTitle =
+                    document.createElement(
+                        "h1"
+                    );
+
+
+                coverTitle.className =
+                    "cover-title";
+
+
+                coverTitle.textContent =
+                    bookTitle;
+
+
+                cover.appendChild(
+                    coverImage
+                );
+
+
+                cover.appendChild(
+                    coverTitle
+                );
+
+
+                container.appendChild(
+                    cover
+                );
+            }
+
+
+            /*
+             * Render every Markdown chapter.
+             */
+            for (
+                let i = 0;
+                i < chapters.length;
+                i++
+            ) {
+
+                const entry =
+                    chapters[i];
+
+
+                const markdown =
+                    await entry.async(
+                        "string"
+                    );
+
+
+                const section =
+                    document.createElement(
+                        "section"
+                    );
+
+
+                section.className =
+                    "chapter";
+
+
+                section.id =
+                    "chapter-" + i;
+
+
+                /*
+                 * Get title from filename.
+                 */
+                const filename =
+                    entry.name
+                        .replace(
+                            /\\/g,
+                            "/"
+                        )
+                        .split("/")
+                        .pop()
+                        .replace(
+                            /\.md$/i,
+                            ""
+                        );
+
+
+                const chapterTitle =
+                    cleanChapterName(
+                        filename
+                    );
+
+
+                /*
+                 * Always show the filename-derived
+                 * chapter title.
+                 */
+                const heading =
+                    document.createElement(
+                        "h1"
+                    );
+
+
+                heading.textContent =
+                    chapterTitle;
+
+
+                section.appendChild(
+                    heading
+                );
+
+
+                /*
+                 * Render Markdown.
+                 */
+                const content =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                content.innerHTML =
+                    marked.parse(
+                        markdown
+                    );
+
+
+                section.appendChild(
+                    content
+                );
+
+
+                container.appendChild(
+                    section
+                );
+            }
+
+
+            buildChapterMenu();
+        }
+
+
+        /* =========================
+           Chapter menu
+           ========================= */
+
+        function buildChapterMenu() {
+
+            chapterMenu.innerHTML = "";
+
+
+            chapters.forEach(
+                (entry, index) => {
+
+                    const filename =
+                        entry.name
+                            .replace(
+                                /\\/g,
+                                "/"
+                            )
+                            .split("/")
+                            .pop()
+                            .replace(
+                                /\.md$/i,
+                                ""
+                            );
+
+
+                    const title =
+                        cleanChapterName(
+                            filename
+                        );
+
+
+                    const button =
+                        document.createElement(
+                            "button"
+                        );
+
+
+                    button.className =
+                        "chapter-menu-item";
+
+
+                    button.textContent =
+                        title;
+
+
+                    button.addEventListener(
+                        "click",
+                        () => {
+
+                            scrollToChapter(
+                                index
+                            );
+
+
+                            chapterMenu.classList.remove(
+                                "open"
+                            );
+                        }
+                    );
+
+
+                    chapterMenu.appendChild(
+                        button
+                    );
+                }
+            );
+        }
+
+
+        /* =========================
+           Chapter scrolling
+           ========================= */
+
+        function scrollToChapter(
+            index
+        ) {
+
+            const element =
+                document.getElementById(
+                    "chapter-" + index
+                );
+
+
+            if (!element) {
+                return;
+            }
+
+
+            const topBarHeight =
+                75;
+
+
+            const position =
+                element.getBoundingClientRect()
+                    .top +
+                window.scrollY -
+                topBarHeight;
+
+
+            window.scrollTo({
+                top: position,
+
+                behavior: "smooth"
+            });
+        }
+
+
+        /* =========================
+           Chapter menu toggle
+           ========================= */
+
+        chapterButton.addEventListener(
+            "click",
+            event => {
+
+                event.stopPropagation();
+
+
+                chapterMenu.classList.toggle(
+                    "open"
+                );
+            }
+        );
+
+
+        document.addEventListener(
+            "click",
+            event => {
+
+                if (
+                    !chapterMenu.contains(
+                        event.target
+                    ) &&
+                    event.target !==
+                        chapterButton
+                ) {
+
+                    chapterMenu.classList.remove(
+                        "open"
+                    );
+                }
+            }
+        );
+
+
+        /* =========================
+           Reading progress
+           ========================= */
+
+        function updateProgressBar() {
+
+            const progress =
+                getReadingProgress();
+
+
+            progressBar.style.width =
+                (
+                    progress * 100
+                ) + "%";
+        }
+
+
+        window.addEventListener(
+            "scroll",
+            () => {
+
+                if (
+                    reader.style.display ===
+                    "none"
+                ) {
+                    return;
+                }
+
+
+                updateProgressBar();
+
+
+                saveReadingPosition();
+            }
+        );
+
+
+        /*
+         * Save one final time when leaving
+         * or closing the page.
+         */
+        window.addEventListener(
+            "beforeunload",
+            () => {
+
+                saveReadingPosition();
+            }
+        );
+
+    </script>
+
+</body>
+</html>
